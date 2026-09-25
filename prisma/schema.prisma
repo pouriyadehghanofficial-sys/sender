@@ -1,0 +1,321 @@
+// اسکیمای دیتابیس پروژه — فاز ۱
+// نکته: SQLite از enum واقعی پشتیبانی نمی‌کند، بنابراین فیلدهای enum به‌صورت
+// String پیاده‌سازی شده‌اند و مقادیر مجاز آن‌ها در کامنت + در لایه سرویس (src/db)
+// اعتبارسنجی می‌شوند. اگر بعداً provider را به "postgresql" تغییر دهید، همین
+// اسکیما با تغییر جزئی (تبدیل String به enum واقعی) روی Postgres هم کار می‌کند.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// ارائه‌دهندگان هوش مصنوعی (برای لایه فیل‌اوور فاز ۲)
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// کاربران پلتفرم (چندمستأجری) — هر کاربر فقط داده‌های خودش را می‌بیند
+// ---------------------------------------------------------------------------
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  // مالک پلتفرم (شما) — دسترسی به دید مدیریتی کل سیستم دارد
+  isOwner      Boolean  @default(false) @map("is_owner")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  apiKeys      ApiKey[]
+  products     Product[]
+  contacts     Contact[]
+  campaigns    Campaign[]
+  activityLogs ActivityLog[]
+
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// کلیدهای API — هر کاربر می‌تواند چند کلید بسازد/باطل کند
+// ---------------------------------------------------------------------------
+model ApiKey {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id])
+  name       String
+  // فقط پیشوند کوتاه برای نمایش به کاربر (مثل ahoora_live_ab12cd34...) ذخیره می‌شود
+  keyPrefix  String    @map("key_prefix")
+  // هش SHA-256 کل توکن؛ خودِ توکن هرگز ذخیره نمی‌شود
+  keyHash    String    @unique @map("key_hash")
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  expiresAt  DateTime? @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+
+  activityLogs ActivityLog[]
+
+  @@index([userId])
+  @@index([keyPrefix])
+  @@map("api_keys")
+}
+
+// ---------------------------------------------------------------------------
+// لاگ فعالیت — برای دید مدیریتی مالک پلتفرم (بخش ۱۲/۱۳ سند)
+// ---------------------------------------------------------------------------
+model ActivityLog {
+  id           String   @id @default(uuid())
+  userId       String?  @map("user_id")
+  user         User?    @relation(fields: [userId], references: [id])
+  apiKeyId     String?  @map("api_key_id")
+  apiKey       ApiKey?  @relation(fields: [apiKeyId], references: [id])
+  action       String
+  resourceType String   @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  // متادیتای کمکی به‌صورت JSON string (مثلاً تعداد مخاطبین import شده)
+  metadata     String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([apiKeyId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("activity_logs")
+}
+
+// ---------------------------------------------------------------------------
+// کمپین‌ها — نسخه‌ی ماندگار (persisted) برای پلتفرم چندمستأجری با pause/resume
+// ---------------------------------------------------------------------------
+model Campaign {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  user          User      @relation(fields: [userId], references: [id])
+  productId     String    @map("product_id")
+  product       Product   @relation(fields: [productId], references: [id])
+  name          String?
+  // مقادیر مجاز: draft | running | paused | completed | cancelled
+  status        String    @default("draft")
+  totalContacts Int       @default(0) @map("total_contacts")
+  processed     Int       @default(0)
+  successful    Int       @default(0)
+  failed        Int       @default(0)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  startedAt     DateTime? @map("started_at")
+  pausedAt      DateTime? @map("paused_at")
+  completedAt   DateTime? @map("completed_at")
+  cancelledAt   DateTime? @map("cancelled_at")
+
+  @@index([userId])
+  @@index([productId])
+  @@index([status])
+  @@map("campaigns")
+}
+
+model AiProvider {
+  id             String    @id @default(uuid())
+  name           String
+  // مقادیر مجاز provider_type: "anthropic" | "openai_compatible"
+  providerType   String    @map("provider_type")
+  baseUrl        String?   @map("base_url")
+  // کلید API به‌صورت رمزنگاری‌شده (AES-256-GCM) ذخیره می‌شود، نه متن خام
+  apiKeyEncrypted String   @map("api_key_encrypted")
+  model          String
+  priority       Int       @default(100)
+  isActive       Boolean   @default(true) @map("is_active")
+  cooldownUntil  DateTime? @map("cooldown_until")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@map("ai_providers")
+}
+
+// ---------------------------------------------------------------------------
+// محصولات (فاز ۳)
+// ---------------------------------------------------------------------------
+model Product {
+  id              String   @id @default(uuid())
+  name            String
+  shortCode       String   @unique @map("short_code")
+  descriptionText String   @map("description_text")
+  // آدرس عکس محصول (اختیاری) که در اولین پاسخ AI برای مشتری ارسال می‌شود
+  photoUrl        String?  @map("photo_url")
+  // اگر خالی باشد یعنی محصول «سراسری» (global) است و همه‌ی کاربران می‌بینندش؛
+  // اگر پر باشد فقط همان کاربر مالکش است (چندمستأجری - بخش ۵ و ۱۵ سند)
+  userId          String?  @map("user_id")
+  user            User?    @relation(fields: [userId], references: [id])
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  contacts             Contact[]
+  conversations         Conversation[]
+  campaigns              Campaign[]
+  promptVariants         PromptVariant[]
+  conversationsAttached  ConversationProduct[]
+
+  @@index([userId])
+  @@map("products")
+}
+
+// ---------------------------------------------------------------------------
+// نسخه‌های مختلف پرامپت/پرسونا برای A/B تست (نرخ تبدیل هر نسخه با هم مقایسه می‌شود)
+// ---------------------------------------------------------------------------
+model PromptVariant {
+  id              String   @id @default(uuid())
+  productId       String   @map("product_id")
+  product         Product  @relation(fields: [productId], references: [id])
+  name            String
+  // اگر پر باشد، به‌جای descriptionText محصول، همین متن به‌عنوان کل system prompt استفاده می‌شود
+  descriptionText String   @map("description_text")
+  // وزن نسبی در انتخاب تصادفی (مثلاً ۱ و ۱ یعنی ۵۰/۵۰؛ ۱ و ۳ یعنی ۲۵٪ و ۷۵٪)
+  weight          Int      @default(1)
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  conversations Conversation[]
+
+  @@index([productId])
+  @@map("prompt_variants")
+}
+
+// ---------------------------------------------------------------------------
+// محصولات اضافه‌ای که در یک مکالمه مطرح شده‌اند (چند محصول هم‌زمان در یک مکالمه)
+// ---------------------------------------------------------------------------
+model ConversationProduct {
+  id             String       @id @default(uuid())
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  productId      String       @map("product_id")
+  product        Product      @relation(fields: [productId], references: [id])
+  addedAt        DateTime     @default(now()) @map("added_at")
+
+  @@unique([conversationId, productId])
+  @@map("conversation_products")
+}
+
+// ---------------------------------------------------------------------------
+// موضوعاتی که AI صادقانه اعلام کرده جوابش را نمی‌داند (گنجینه‌ی بهبود محصول)
+// ---------------------------------------------------------------------------
+model UnansweredTopic {
+  id             String       @id @default(uuid())
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  topic          String
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@map("unanswered_topics")
+}
+
+// ---------------------------------------------------------------------------
+// مخاطبین (فاز ۴ و ۵)
+// ---------------------------------------------------------------------------
+model Contact {
+  id           String    @id @default(uuid())
+  name         String
+  phone        String
+  // شناسه chat بازو — اگر از پاسخ سفیر یا اولین پیام ورودی webhook قابل استخراج باشد
+  // اینجا ذخیره می‌شود تا پیام‌های بعدی کاربر مستقیماً به همین مخاطب مرتبط شوند.
+  baleChatId   String?   @unique @map("bale_chat_id")
+  // مالک چندمستأجری این مخاطب؛ null یعنی از سیستم قدیمی تک‌مستأجر (بخش ۱ سند)
+  userId       String?   @map("user_id")
+  user         User?     @relation(fields: [userId], references: [id])
+  productId    String?   @map("product_id")
+  product      Product?  @relation(fields: [productId], references: [id])
+  // مقادیر مجاز status: "pending" | "sent" | "failed" | "no_bale"
+  status       String    @default("pending")
+  sentAt       DateTime? @map("sent_at")
+  errorMessage String?   @map("error_message")
+  // خلاصه‌ی حافظه‌ی این مشتری (بین مکالمه‌های مختلف حفظ می‌شود): چه چیزهایی قبلاً
+  // گفته شده، ترجیحات مشتری، و... تا AI دوباره از اول شروع نکند یا تکراری حرف نزند.
+  memoryNotes  String?   @map("memory_notes")
+  // آخرین باری که خودِ مشتری پیام داد (برای پیگیری خودکار مشتریان مردد/سبد رهاشده)
+  lastInteractionAt DateTime? @map("last_interaction_at")
+  // آخرین باری که پیام یادآوری/پیگیری خودکار برایش فرستاده شد (تا دوباره‌کاری نشود)
+  followUpSentAt    DateTime? @map("follow_up_sent_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  conversations Conversation[]
+
+  @@index([phone])
+  @@index([status])
+  @@index([userId])
+  @@map("contacts")
+}
+
+// ---------------------------------------------------------------------------
+// مکالمات (فاز ۶)
+// ---------------------------------------------------------------------------
+model Conversation {
+  id        String   @id @default(uuid())
+  contactId String   @map("contact_id")
+  contact   Contact  @relation(fields: [contactId], references: [id])
+  productId String?  @map("product_id")
+  product   Product? @relation(fields: [productId], references: [id])
+  // نسخه‌ی پرامپت/پرسونایی که برای A/B تست به این مکالمه اختصاص داده شده (اگر محصول نسخه‌ی فعال داشته باشد)
+  promptVariantId String?        @map("prompt_variant_id")
+  promptVariant   PromptVariant? @relation(fields: [promptVariantId], references: [id])
+  // مقادیر مجاز state: "active" | "completed" | "abandoned"
+  state     String   @default("active")
+  // وقتی true باشد، AI دیگر خودکار پاسخ نمی‌دهد و باید از پنل مدیریت پاسخ داد
+  needsHuman       Boolean   @default(false) @map("needs_human")
+  escalatedAt      DateTime? @map("escalated_at")
+  escalationReason String?   @map("escalation_reason")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  messages         Message[]
+  orders           Order[]
+  extraProducts    ConversationProduct[]
+  unansweredTopics UnansweredTopic[]
+
+  @@index([contactId])
+  @@map("conversations")
+}
+
+// ---------------------------------------------------------------------------
+// پیام‌های هر مکالمه
+// ---------------------------------------------------------------------------
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  // مقادیر مجاز sender: "user" | "ai"
+  sender         String
+  text           String
+  // برای جلوگیری از پردازش تکراری پیام‌های ورودی از وبهوک بازو (idempotency)
+  externalMessageId String?   @unique @map("external_message_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@map("messages")
+}
+
+// ---------------------------------------------------------------------------
+// سفارش‌های تکمیل‌شده (فاز ۷)
+// ---------------------------------------------------------------------------
+model Order {
+  id             String       @id @default(uuid())
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  // فعلاً تنها مقدار مجاز: "completed"
+  status         String       @default("completed")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@map("orders")
+}
+
+// ---------------------------------------------------------------------------
+// تنظیمات کلید-مقدار عمومی (کلید بله، سفیر، مقصد اعلان و ...)
+// ---------------------------------------------------------------------------
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}

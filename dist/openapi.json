@@ -1,0 +1,678 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "bale-broadcast-ai API",
+        "version": "1.0.0",
+        "description": "API واحد و نسخه‌بندی‌شده‌ی پلتفرم پیام‌رسانی/فروش هوشمند روی بله.\n\n## احراز هویت\nهمه‌ی endpoint ها (به‌جز /auth/register و /auth/login) به هدر Authorization: Bearer <token> نیاز دارند. دو نوع توکن پذیرفته می‌شود و هر دو از یک هدر یکسان استفاده می‌کنند:\n\n1. JWT نشست داشبورد — از POST /auth/login یا POST /auth/register گرفته می‌شود. اعتبار ۷ روزه دارد.\n   مثال: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\n2. کلید API بلندمدت — از POST /api-keys ساخته می‌شود، با پیشوند abai_live_ شروع می‌شود.\n   مثال: Authorization: Bearer abai_live_9f6e817cb2a1...\n\nسرور نوع توکن را خودکار از روی پیشوندش تشخیص می‌دهد. هر دو userId احراز هویت‌شده را تعیین می‌کنند و پلتفرم داده‌ی هر کاربر را کاملاً از بقیه ایزوله نگه می‌دارد.\n\n## کدهای خطای استاندارد\n- 401: توکن ارسال نشده، نامعتبر، منقضی یا باطل‌شده است.\n- 403: توکن معتبر است ولی اجازه‌ی دسترسی به این بخش را ندارد (مثلاً /admin/* فقط برای owner).\n\nهر پاسخ خطا یک شیء ساده با فیلد error (رشته‌ی قابل‌نمایش) برمی‌گرداند."
+    },
+    "servers": [{ "url": "/api/v1" }],
+    "components": {
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT یا API Key",
+                "description": "یا JWT گرفته‌شده از /auth/login و /auth/register، یا یک کلید API که با POST /api-keys ساخته‌اید (پیشوند abai_live_). هر دو در همین یک هدر Authorization: Bearer <token> فرستاده می‌شوند."
+            }
+        },
+        "responses": {
+            "BadRequest": {
+                "description": "درخواست نامعتبر — فیلد الزامی خالی است یا مقدار داده‌شده نادرست است.",
+                "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "فیلدهای name و descriptionText الزامی هستند." } } }
+            },
+            "Unauthorized": {
+                "description": "توکن ارسال نشده، نامعتبر، منقضی یا باطل‌شده است.",
+                "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "توکن احراز هویت ارسال نشده (Authorization: Bearer <token>)." } } }
+            },
+            "Forbidden": {
+                "description": "توکن معتبر است ولی اجازه‌ی این عملیات را ندارید.",
+                "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "این بخش فقط برای مالک پلتفرم در دسترس است." } } }
+            },
+            "NotFound": {
+                "description": "منبع یافت نشد — یا اصلاً وجود ندارد، یا متعلق به کاربر دیگری است (این دو حالت عمداً یکسان جواب داده می‌شوند تا اطلاعاتی درباره‌ی داده‌ی کاربران دیگر درز نکند).",
+                "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "محصول یافت نشد." } } }
+            },
+            "Conflict": {
+                "description": "عملیات با وضعیت فعلی منبع در تعارض است.",
+                "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "error": "این کمپین از قبل در حال اجراست." } } }
+            }
+        },
+        "schemas": {
+            "Error": {
+                "type": "object",
+                "properties": { "error": { "type": "string", "description": "پیام خطای قابل‌نمایش به کاربر" } },
+                "required": ["error"]
+            },
+            "User": {
+                "type": "object",
+                "description": "فیلدهای عمومی و امن کاربر — passwordHash هرگز در هیچ پاسخی برنمی‌گردد.",
+                "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "email": { "type": "string", "format": "email" },
+                    "isOwner": { "type": "boolean" },
+                    "isActive": { "type": "boolean" },
+                    "createdAt": { "type": "string", "format": "date-time" }
+                }
+            },
+            "AuthTokenResponse": {
+                "type": "object",
+                "properties": {
+                    "token": { "type": "string", "description": "JWT برای استفاده در Authorization: Bearer" },
+                    "user": { "$ref": "#/components/schemas/User" }
+                }
+            },
+            "ApiKey": {
+                "type": "object",
+                "description": "keyHash (هش SHA-256 کل توکن) هرگز در هیچ پاسخی برنمی‌گردد؛ فقط این فیلدهای امن.",
+                "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "name": { "type": "string" },
+                    "keyPrefix": { "type": "string", "example": "abai_live_9f6e817c..." },
+                    "isActive": { "type": "boolean" },
+                    "createdAt": { "type": "string", "format": "date-time" },
+                    "lastUsedAt": { "type": "string", "format": "date-time", "nullable": true }
+                }
+            },
+            "ApiKeyCreated": {
+                "allOf": [
+                    { "$ref": "#/components/schemas/ApiKey" },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "token": { "type": "string", "description": "توکن کامل — فقط همین یک‌بار نمایش داده می‌شود.", "example": "abai_live_9f6e817cb2a145f0..." },
+                            "warning": { "type": "string" }
+                        }
+                    }
+                ]
+            },
+            "Product": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "name": { "type": "string" },
+                    "shortCode": { "type": "string" },
+                    "descriptionText": { "type": "string" },
+                    "isActive": { "type": "boolean" },
+                    "userId": { "type": "string", "nullable": true, "description": "null یعنی محصول سراسری (global) و همه‌ی کاربران می‌بینندش" },
+                    "createdAt": { "type": "string", "format": "date-time" },
+                    "updatedAt": { "type": "string", "format": "date-time" }
+                }
+            },
+            "CampaignProgress": {
+                "type": "object",
+                "properties": {
+                    "total": { "type": "integer" },
+                    "processed": { "type": "integer" },
+                    "successful": { "type": "integer" },
+                    "failed": { "type": "integer" },
+                    "pending": { "type": "integer" },
+                    "percentage": { "type": "integer", "minimum": 0, "maximum": 100 }
+                }
+            },
+            "Campaign": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "name": { "type": "string", "nullable": true },
+                    "status": { "type": "string", "enum": ["draft", "running", "paused", "completed", "cancelled"] },
+                    "productId": { "type": "string", "format": "uuid" },
+                    "product": { "type": "object", "nullable": true, "properties": { "id": { "type": "string" }, "name": { "type": "string" } } },
+                    "progress": { "$ref": "#/components/schemas/CampaignProgress" },
+                    "running": { "type": "boolean", "description": "آیا همین الان در پس‌زمینه در حال ارسال است" },
+                    "createdAt": { "type": "string", "format": "date-time" },
+                    "startedAt": { "type": "string", "format": "date-time", "nullable": true },
+                    "pausedAt": { "type": "string", "format": "date-time", "nullable": true },
+                    "completedAt": { "type": "string", "format": "date-time", "nullable": true },
+                    "cancelledAt": { "type": "string", "format": "date-time", "nullable": true }
+                }
+            },
+            "Contact": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "name": { "type": "string" },
+                    "phone": { "type": "string", "example": "989123456789" },
+                    "status": { "type": "string", "enum": ["pending", "sent", "failed", "no_bale"] },
+                    "sentAt": { "type": "string", "format": "date-time", "nullable": true },
+                    "errorMessage": { "type": "string", "nullable": true }
+                }
+            },
+            "Message": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "sender": { "type": "string", "enum": ["user", "ai", "human"] },
+                    "text": { "type": "string" },
+                    "createdAt": { "type": "string", "format": "date-time" }
+                }
+            },
+            "Conversation": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "contactId": { "type": "string" },
+                    "productId": { "type": "string", "nullable": true },
+                    "state": { "type": "string", "enum": ["active", "completed", "abandoned"] },
+                    "needsHuman": { "type": "boolean" },
+                    "escalatedAt": { "type": "string", "format": "date-time", "nullable": true },
+                    "escalationReason": { "type": "string", "nullable": true },
+                    "contact": { "$ref": "#/components/schemas/Contact" },
+                    "product": { "$ref": "#/components/schemas/Product" },
+                    "messages": { "type": "array", "items": { "$ref": "#/components/schemas/Message" } }
+                }
+            },
+            "WaitingConversation": {
+                "allOf": [
+                    { "$ref": "#/components/schemas/Conversation" },
+                    { "type": "object", "properties": { "waitingMinutes": { "type": "integer", "nullable": true, "description": "چند دقیقه از ارجاع می‌گذرد" } } }
+                ]
+            },
+            "Order": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "conversationId": { "type": "string" },
+                    "status": { "type": "string", "enum": ["completed"] },
+                    "createdAt": { "type": "string", "format": "date-time" },
+                    "conversation": {
+                        "type": "object",
+                        "properties": { "contact": { "$ref": "#/components/schemas/Contact" }, "product": { "$ref": "#/components/schemas/Product" } }
+                    }
+                }
+            },
+            "Referral": {
+                "type": "object",
+                "properties": {
+                    "conversationId": { "type": "string" },
+                    "contact": { "$ref": "#/components/schemas/Contact" },
+                    "product": { "$ref": "#/components/schemas/Product" },
+                    "status": { "type": "string", "enum": ["normal", "needs_review", "referred", "resolved"] },
+                    "reason": { "type": "string", "nullable": true },
+                    "escalatedAt": { "type": "string", "format": "date-time", "nullable": true },
+                    "latestMessages": { "type": "array", "items": { "$ref": "#/components/schemas/Message" } }
+                }
+            },
+            "ImportResult": {
+                "type": "object",
+                "properties": {
+                    "totalRows": { "type": "integer" },
+                    "imported": { "type": "integer" },
+                    "duplicates": { "type": "integer" },
+                    "invalid": { "type": "integer" },
+                    "failed": { "type": "integer" },
+                    "totalContactsNow": { "type": "integer", "description": "کل مخاطبین این کاربر بعد از این import" }
+                }
+            },
+            "ActivityLogEntry": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "action": { "type": "string", "example": "campaign_started" },
+                    "resourceType": { "type": "string", "example": "campaign" },
+                    "resourceId": { "type": "string", "nullable": true },
+                    "metadata": { "type": "string", "nullable": true, "description": "JSON string با جزئیات کمکی" },
+                    "createdAt": { "type": "string", "format": "date-time" }
+                }
+            },
+            "DashboardSummary": {
+                "type": "object",
+                "properties": {
+                    "campaigns": { "type": "object", "properties": { "active": { "type": "integer" }, "total": { "type": "integer" }, "recent": { "type": "array", "items": { "$ref": "#/components/schemas/Campaign" } } } },
+                    "messages": { "type": "object", "properties": { "sent": { "type": "integer" }, "failed": { "type": "integer" }, "pending": { "type": "integer" }, "noBale": { "type": "integer" } } },
+                    "conversations": { "type": "object", "properties": { "active": { "type": "integer" }, "waitingForResponse": { "type": "integer" } } },
+                    "referrals": { "type": "integer" },
+                    "orders": { "type": "object", "properties": { "completed": { "type": "integer" } } },
+                    "products": { "type": "object", "properties": { "active": { "type": "integer" } } },
+                    "recentActivity": { "type": "array", "items": { "$ref": "#/components/schemas/ActivityLogEntry" } }
+                }
+            },
+            "DashboardStatistics": {
+                "type": "object",
+                "properties": {
+                    "messagesToday": { "type": "integer" },
+                    "messagesThisWeek": { "type": "integer" },
+                    "messagesThisMonth": { "type": "integer" },
+                    "successRate": { "type": "integer", "description": "درصد (۰ تا ۱۰۰)" },
+                    "failureRate": { "type": "integer" },
+                    "activeCampaigns": { "type": "integer" },
+                    "activeConversations": { "type": "integer" },
+                    "waitingForResponse": { "type": "integer" },
+                    "referrals": { "type": "integer" },
+                    "completedOrders": { "type": "integer" }
+                }
+            },
+            "AdminApiKeySummary": {
+                "allOf": [
+                    { "$ref": "#/components/schemas/ApiKey" },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "user": { "$ref": "#/components/schemas/User" },
+                            "activitySummary": { "type": "object", "additionalProperties": { "type": "integer" }, "example": { "product_created": 3, "campaign_started": 5, "contacts_imported": 2 } }
+                        }
+                    }
+                ]
+            },
+            "AdminActivityEntry": {
+                "allOf": [
+                    { "$ref": "#/components/schemas/ActivityLogEntry" },
+                    { "type": "object", "properties": { "user": { "$ref": "#/components/schemas/User" }, "apiKey": { "$ref": "#/components/schemas/ApiKey" } } }
+                ]
+            },
+            "PaginatedAdminActivity": {
+                "type": "object",
+                "properties": {
+                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/AdminActivityEntry" } },
+                    "page": { "type": "integer" },
+                    "pageSize": { "type": "integer" },
+                    "total": { "type": "integer" },
+                    "totalPages": { "type": "integer" }
+                }
+            }
+        }
+    },
+    "security": [{ "bearerAuth": [] }],
+    "paths": {
+        "/auth/register": {
+            "post": {
+                "summary": "ثبت‌نام کاربر جدید",
+                "description": "اولین کاربری که در کل پلتفرم ثبت‌نام کند خودکار owner (مالک پلتفرم) می‌شود.",
+                "security": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["email", "password"],
+                                "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string", "minLength": 8, "format": "password" } }
+                            },
+                            "example": { "email": "shop@example.com", "password": "SuperSecret123" }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "description": "ثبت‌نام موفق", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthTokenResponse" } } } },
+                    "400": { "$ref": "#/components/responses/BadRequest" },
+                    "409": { "description": "این ایمیل قبلاً ثبت‌نام کرده است.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "summary": "ورود با ایمیل/پسورد",
+                "security": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "type": "object", "required": ["email", "password"], "properties": { "email": { "type": "string", "format": "email" }, "password": { "type": "string", "format": "password" } } },
+                            "example": { "email": "shop@example.com", "password": "SuperSecret123" }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": { "description": "ورود موفق", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthTokenResponse" } } } },
+                    "400": { "$ref": "#/components/responses/BadRequest" },
+                    "401": { "description": "ایمیل یا پسورد اشتباه است.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "403": { "description": "حساب غیرفعال شده است.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+        "/api-keys": {
+            "get": {
+                "summary": "لیست کلیدهای API من",
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/ApiKey" } } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            },
+            "post": {
+                "summary": "ساخت کلید API جدید",
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } }, "example": { "name": "سرور تولید" } } }
+                },
+                "responses": {
+                    "201": { "description": "توکن کامل فقط همین یک‌بار نمایش داده می‌شود", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiKeyCreated" } } } },
+                    "400": { "$ref": "#/components/responses/BadRequest" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            }
+        },
+        "/api-keys/{id}": {
+            "delete": {
+                "summary": "باطل کردن یک کلید API",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": {
+                    "204": { "description": "باطل شد (بدون بدنه)" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            }
+        },
+        "/products": {
+            "get": {
+                "summary": "لیست محصولات من + محصولات سراسری",
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Product" } } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            },
+            "post": {
+                "summary": "ساخت محصول جدید",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": { "type": "object", "required": ["name", "descriptionText"], "properties": { "name": { "type": "string" }, "shortCode": { "type": "string" }, "descriptionText": { "type": "string" } } },
+                            "example": { "name": "کرم مرطوب‌کننده", "descriptionText": "حجم ۵۰ میلی‌لیتر، قیمت ۲۵۰ هزار تومان" }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "description": "ساخته شد", "content": { "application/json": { "schema": { "type": "object", "properties": { "product": { "$ref": "#/components/schemas/Product" } } } } } },
+                    "400": { "$ref": "#/components/responses/BadRequest" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            }
+        },
+        "/products/{id}": {
+            "get": {
+                "summary": "جزئیات یک محصول",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "product": { "$ref": "#/components/schemas/Product" } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            },
+            "patch": {
+                "summary": "ویرایش/فعال-غیرفعال کردن محصول (فقط مالک محصول، نه محصولات سراسری)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": { "type": "object", "properties": { "name": { "type": "string" }, "descriptionText": { "type": "string" }, "isActive": { "type": "boolean" } } },
+                            "example": { "isActive": false }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": { "description": "به‌روزرسانی شد", "content": { "application/json": { "schema": { "type": "object", "properties": { "product": { "$ref": "#/components/schemas/Product" } } } } } },
+                    "400": { "$ref": "#/components/responses/BadRequest" },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            }
+        },
+        "/contacts/import": {
+            "post": {
+                "summary": "آپلود اکسل مخاطبین از طریق API",
+                "description": "multipart/form-data با فیلد file (.xlsx/.xls). ستون نام/شماره را می‌توانید صریح با nameColumnIndex/phoneColumnIndex بدهید، وگرنه از روی سرنویس‌های رایج فارسی/انگلیسی خودکار حدس زده می‌شود.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["file"],
+                                "properties": {
+                                    "file": { "type": "string", "format": "binary" },
+                                    "productId": { "type": "string", "description": "اختیاری — مخاطبین به این محصول متصل می‌شوند" },
+                                    "productCode": { "type": "string", "description": "جایگزین productId؛ shortCode محصول" },
+                                    "nameColumnIndex": { "type": "integer", "description": "اندیس ستون نام (از ۰)؛ اختیاری" },
+                                    "phoneColumnIndex": { "type": "integer", "description": "اندیس ستون شماره (از ۰)؛ اختیاری" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "description": "نتیجه import", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ImportResult" }, "example": { "totalRows": 120, "imported": 110, "duplicates": 6, "invalid": 4, "failed": 0, "totalContactsNow": 430 } } } },
+                    "400": { "description": "فایل ارسال نشده، قابل خواندن نبود، یا ستون‌ها قابل تشخیص نبودند", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            }
+        },
+        "/campaigns": {
+            "get": {
+                "summary": "لیست کمپین‌های من",
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Campaign" } } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            },
+            "post": {
+                "summary": "ساخت کمپین جدید (draft)",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["productId"],
+                                "properties": {
+                                    "name": { "type": "string", "description": "نام دلخواه کمپین (اختیاری)" },
+                                    "productId": { "type": "string", "description": "شناسه‌ی محصولی که این کمپین برایش ساخته می‌شود" }
+                                }
+                            },
+                            "example": { "name": "کمپین بهاره", "productId": "b1f2c3d4-5678-90ab-cdef-1234567890ab" }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": { "description": "ساخته شد (در وضعیت draft)", "content": { "application/json": { "schema": { "type": "object", "properties": { "campaign": { "$ref": "#/components/schemas/Campaign" } } } } } },
+                    "400": { "description": "productId نامعتبر یا متعلق به شما نیست", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            }
+        },
+        "/campaigns/{id}": {
+            "get": {
+                "summary": "جزئیات و پیشرفت یک کمپین",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "campaign": { "$ref": "#/components/schemas/Campaign" } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            }
+        },
+        "/campaigns/{id}/start": {
+            "post": {
+                "summary": "شروع ارسال کمپین (در پس‌زمینه)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": {
+                    "202": { "description": "شروع شد؛ پیشرفت را از GET /campaigns/{id} دنبال کنید", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" }, "campaignId": { "type": "string" } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "$ref": "#/components/responses/Conflict" }
+                }
+            }
+        },
+        "/campaigns/{id}/pause": {
+            "post": {
+                "summary": "توقف موقت کمپین در حال اجرا",
+                "description": "بلافاصله متوقف نمی‌شود؛ قبل از ارسال پیام بعدی، حلقه‌ی ارسال وضعیت را چک و متوقف می‌کند.",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": {
+                    "200": { "description": "متوقف شد", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "description": "فقط کمپین در حال اجرا قابل توقف است", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+        "/campaigns/{id}/resume": {
+            "post": {
+                "summary": "ادامه‌ی کمپین متوقف‌شده — دقیقاً از همان مخاطب باقیمانده",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": {
+                    "202": { "description": "ادامه پیدا کرد", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "description": "فقط کمپین متوقف‌شده قابل ادامه است", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+        "/campaigns/{id}/cancel": {
+            "post": {
+                "summary": "لغو کامل کمپین (غیرقابل بازگشت)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": {
+                    "200": { "description": "لغو شد", "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" },
+                    "409": { "description": "کمپین از قبل تمام یا لغو شده است", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+                }
+            }
+        },
+        "/conversations/active": {
+            "get": {
+                "summary": "مکالمات فعال (در حال گفتگوی خودکار با AI)",
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Conversation" } } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            }
+        },
+        "/conversations/waiting": {
+            "get": {
+                "summary": "مکالمات منتظر پاسخ من (ارجاع‌شده به انسان)",
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/WaitingConversation" } } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            }
+        },
+        "/conversations/{id}": {
+            "get": {
+                "summary": "تاریخچه کامل یک مکالمه",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "conversation": { "$ref": "#/components/schemas/Conversation" } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            }
+        },
+        "/conversations/{id}/reply": {
+            "post": {
+                "summary": "پاسخ دستی به یک مکالمه‌ی ارجاع‌شده — مستقیماً به بازو می‌رود",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/json": { "schema": { "type": "object", "required": ["text"], "properties": { "text": { "type": "string" } } }, "example": { "text": "سلام، بله موجوده. ارسالش رایگانه." } } }
+                },
+                "responses": {
+                    "200": { "description": "ارسال شد", "content": { "application/json": { "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } } } } },
+                    "400": { "description": "متن خالی است یا مخاطب chat_id بازو ندارد", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            }
+        },
+        "/conversations/{id}/resolve": {
+            "post": {
+                "summary": "پایان ارجاع — مکالمه به AI برمی‌گردد و دوباره خودکار پاسخ می‌دهد",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "conversation": { "$ref": "#/components/schemas/Conversation" } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            }
+        },
+        "/orders": {
+            "get": {
+                "summary": "لیست سفارش‌های من",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Order" } }, "summary": { "type": "object", "properties": { "completed": { "type": "integer" }, "active": { "type": "integer" }, "cancelled": { "type": "integer" } } } } } } }
+                    },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            }
+        },
+        "/orders/{id}": {
+            "get": {
+                "summary": "جزئیات یک سفارش",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "order": { "$ref": "#/components/schemas/Order" } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "404": { "$ref": "#/components/responses/NotFound" }
+                }
+            }
+        },
+        "/referrals": {
+            "get": {
+                "summary": "لیست مکالمات ارجاع‌شده",
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/Referral" } } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            }
+        },
+        "/dashboard/summary": {
+            "get": {
+                "summary": "خلاصه‌ی کامل داشبورد در یک درخواست",
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DashboardSummary" } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            }
+        },
+        "/dashboard/statistics": {
+            "get": {
+                "summary": "آمار با فیلتر بازه‌ی زمانی",
+                "parameters": [
+                    { "name": "from", "in": "query", "schema": { "type": "string", "format": "date" }, "description": "رزرو شده برای نسخه‌ی بعدی" },
+                    { "name": "to", "in": "query", "schema": { "type": "string", "format": "date" }, "description": "رزرو شده برای نسخه‌ی بعدی" }
+                ],
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DashboardStatistics" } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" }
+                }
+            }
+        },
+        "/admin/users": {
+            "get": {
+                "summary": "[فقط مالک پلتفرم] لیست همه‌ی کاربران",
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/User" } } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" }
+                }
+            }
+        },
+        "/admin/api-keys": {
+            "get": {
+                "summary": "[فقط مالک] همه‌ی کلیدهای API + خلاصه فعالیت هرکدام",
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "data": { "type": "array", "items": { "$ref": "#/components/schemas/AdminApiKeySummary" } } } } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" }
+                }
+            }
+        },
+        "/admin/activity": {
+            "get": {
+                "summary": "[فقط مالک] لاگ کامل فعالیت، با فیلتر و صفحه‌بندی",
+                "parameters": [
+                    { "name": "userId", "in": "query", "schema": { "type": "string" }, "description": "فقط فعالیت این کاربر" },
+                    { "name": "apiKeyId", "in": "query", "schema": { "type": "string" }, "description": "فقط فعالیت این کلید API" },
+                    { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+                    { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 100 } }
+                ],
+                "responses": {
+                    "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PaginatedAdminActivity" } } } },
+                    "401": { "$ref": "#/components/responses/Unauthorized" },
+                    "403": { "$ref": "#/components/responses/Forbidden" }
+                }
+            }
+        }
+    }
+}

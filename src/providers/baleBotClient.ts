@@ -1,0 +1,74 @@
+import axios from "axios";
+
+const DEFAULT_TAPI_BASE = "https://tapi.bale.ai";
+const REQUEST_TIMEOUT_MS = 15_000;
+
+export interface BaleBotConfig {
+  botToken: string;
+  /** فقط برای تست: override آدرس پایه API */
+  apiBase?: string;
+}
+
+export async function setBaleWebhook(config: BaleBotConfig, webhookUrl: string) {
+  const base = config.apiBase ?? DEFAULT_TAPI_BASE;
+  const url = `${base}/bot${config.botToken}/setWebhook`;
+  const response = await axios.post(url, { url: webhookUrl }, { timeout: REQUEST_TIMEOUT_MS });
+  return response.data;
+}
+
+/** حذف وبهوک ثبت‌شده؛ لازم است چون تا وبهوک فعال باشد، getUpdates کار نمی‌کند */
+export async function deleteBaleWebhook(config: BaleBotConfig) {
+  const base = config.apiBase ?? DEFAULT_TAPI_BASE;
+  const url = `${base}/bot${config.botToken}/deleteWebhook`;
+  const response = await axios.post(url, {}, { timeout: REQUEST_TIMEOUT_MS });
+  return response.data;
+}
+
+/** دریافت پیام‌های جدید به‌صورت polling (برای اجرای محلی بدون آدرس عمومی) */
+export async function getBaleUpdates(
+  config: BaleBotConfig,
+  params: { offset?: number; limit?: number; timeout?: number } = {}
+) {
+  const base = config.apiBase ?? DEFAULT_TAPI_BASE;
+  const url = `${base}/bot${config.botToken}/getUpdates`;
+  const response = await axios.post(url, params, {
+    timeout: (params.timeout ?? 0) * 1000 + REQUEST_TIMEOUT_MS,
+  });
+  return response.data;
+}
+
+export async function sendBaleMessage(config: BaleBotConfig, chatId: string, text: string) {
+  const base = config.apiBase ?? DEFAULT_TAPI_BASE;
+  const url = `${base}/bot${config.botToken}/sendMessage`;
+  const response = await axios.post(
+    url,
+    { chat_id: chatId, text },
+    { timeout: REQUEST_TIMEOUT_MS }
+  );
+  return response.data;
+}
+
+/** بررسی اعتبار توکن (برای عیب‌یابی) */
+export async function sendBalePhoto(config: BaleBotConfig, chatId: string, photoUrl: string, caption?: string) {
+  const base = config.apiBase ?? DEFAULT_TAPI_BASE;
+  const url = `${base}/bot${config.botToken}/sendPhoto`;
+  const response = await axios.post(
+    url,
+    { chat_id: chatId, photo: photoUrl, caption: caption ?? "" },
+    { timeout: REQUEST_TIMEOUT_MS }
+  );
+  return response.data;
+}
+
+export async function getBaleMe(config: BaleBotConfig) {
+  const base = config.apiBase ?? DEFAULT_TAPI_BASE;
+  const response = await axios.get(`${base}/bot${config.botToken}/getMe`, { timeout: REQUEST_TIMEOUT_MS });
+  return response.data;
+}
+
+/** آدرس وبهوک ثبت‌شده در بله (برای عیب‌یابی؛ اگر بله این متد را نداشته باشد خطا می‌دهد و نادیده گرفته می‌شود) */
+export async function getBaleWebhookInfo(config: BaleBotConfig) {
+  const base = config.apiBase ?? DEFAULT_TAPI_BASE;
+  const response = await axios.get(`${base}/bot${config.botToken}/getWebhookInfo`, { timeout: REQUEST_TIMEOUT_MS });
+  return response.data;
+}

@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<title>پنل مدیریت ربات فروش بله</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --border: #2a2f3a;
+    --text: #e6e8ec;
+    --muted: #9aa1ad;
+    --accent: #4f8cff;
+    --accent-2: #34c47a;
+    --danger: #ef5a5a;
+    --warn: #e0a83e;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Tahoma, "Vazirmatn", "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  header span { color: var(--muted); font-size: 13px; }
+
+  nav {
+    display: flex;
+    gap: 4px;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  nav button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    padding: 12px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+  }
+  nav button.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+
+  main { padding: 24px; max-width: 980px; margin: 0 auto; }
+  .tab { display: none; }
+  .tab.active { display: block; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 18px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 14px 0; }
+  .card h3 { font-size: 13px; color: var(--muted); margin: 18px 0 8px; }
+
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; margin-top: 10px; }
+  input, select, textarea {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  textarea { min-height: 90px; resize: vertical; }
+
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 160px; }
+
+  button.btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 14px;
+  }
+  button.btn:hover { opacity: 0.9; }
+  button.btn.secondary { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
+  button.btn.danger { background: var(--danger); }
+  button.btn.small { padding: 5px 10px; font-size: 12px; margin-top: 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  th, td { text-align: right; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: normal; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+  .badge.pending { background: #3a3f4c; color: var(--muted); }
+  .badge.sent { background: rgba(52,196,122,.15); color: var(--accent-2); }
+  .badge.failed { background: rgba(239,90,90,.15); color: var(--danger); }
+  .badge.no_bale { background: rgba(224,168,62,.15); color: var(--warn); }
+  .badge.active { background: rgba(79,140,255,.15); color: var(--accent); }
+  .badge.completed { background: rgba(52,196,122,.15); color: var(--accent-2); }
+
+  .msg { padding: 10px 12px; border-radius: 6px; font-size: 13px; margin-top: 12px; }
+  .msg.ok { background: rgba(52,196,122,.12); color: var(--accent-2); }
+  .msg.err { background: rgba(239,90,90,.12); color: var(--danger); }
+  .muted { color: var(--muted); font-size: 12px; }
+  .hidden { display: none !important; }
+  #handoffBadge { background: var(--danger); color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 6px; margin-right: 4px; }
+  #handoffBadge:empty { display: none; }
+
+  .chatBox { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; height: 320px; overflow-y: auto; margin-top: 10px; }
+  .chatMsg { max-width: 80%; padding: 8px 12px; border-radius: 10px; margin-bottom: 8px; font-size: 13px; line-height: 1.6; }
+  .chatMsg.user { background: var(--accent); color: #fff; margin-right: auto; }
+  .chatMsg.assistant { background: #2a2f3a; margin-left: auto; }
+  .chatInputRow { display: flex; gap: 8px; margin-top: 10px; }
+  .chatInputRow input { flex: 1; }
+</style>
+</head>
+<body>
+
+<div id="loginOverlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:1000">
+  <div class="card" style="max-width:360px;width:90%">
+    <h2>ورود به پنل مدیریت</h2>
+    <p class="muted">توکن پنل مدیریت (ADMIN_PANEL_TOKEN در فایل .env) را وارد کنید.</p>
+    <input id="loginTokenInput" type="password" placeholder="توکن..." onkeydown="if(event.key==='Enter') saveToken()" />
+    <button class="btn" onclick="saveToken()" style="width:100%">ورود</button>
+  </div>
+</div>
+
+<div id="appRoot">
+
+<header>
+  <h1>پنل مدیریت ربات فروش بله</h1>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span id="healthStatus">در حال بررسی اتصال...</span>
+    <button class="btn secondary small" onclick="logout()">خروج</button>
+  </div>
+</header>
+
+<nav>
+  <button class="tab-btn active" data-tab="settings">تنظیمات API</button>
+  <button class="tab-btn" data-tab="products">محصولات</button>
+  <button class="tab-btn" data-tab="contacts">مخاطبین</button>
+  <button class="tab-btn" data-tab="conversations">مکالمات و سفارش‌ها</button>
+  <button class="tab-btn" data-tab="handoff">ارجاع به من <span id="handoffBadge"></span></button>
+</nav>
+
+<main>
+
+  <!-- ===================== تب ۱: تنظیمات API ===================== -->
+  <section class="tab active" id="tab-settings">
+
+    <div class="card">
+      <h2>افزودن ارائه‌دهنده هوش مصنوعی</h2>
+      <div class="row">
+        <div>
+          <label>نام دلخواه</label>
+          <input id="p_name" placeholder="مثلاً Claude اصلی" />
+        </div>
+        <div>
+          <label>نوع</label>
+          <select id="p_type">
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="openai_compatible">سازگار با OpenAI (OpenRouter و ...)</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>مدل(ها) — اگر این کلید چند مدل را پشتیبانی می‌کند، با کاما جدا کنید</label>
+          <input id="p_model" placeholder="claude-sonnet-4-6, claude-haiku-4-5" />
+        </div>
+        <div>
+          <label>اولویت (عدد کوچک‌تر = بالاتر)</label>
+          <input id="p_priority" type="number" value="100" />
+        </div>
+      </div>
+      <label>آدرس پایه (فقط برای «سازگار با OpenAI» — خالی بگذارید یعنی OpenRouter)</label>
+      <input id="p_baseUrl" placeholder="https://openrouter.ai/api/v1" />
+      <label>کلید API</label>
+      <input id="p_apiKey" type="password" placeholder="sk-..." />
+      <button class="btn" onclick="createProvider()">افزودن</button>
+      <div id="providerMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>ارائه‌دهندگان ثبت‌شده</h2>
+      <table>
+        <thead><tr><th>نام</th><th>نوع</th><th>مدل</th><th>اولویت</th><th>وضعیت</th><th></th></tr></thead>
+        <tbody id="providersTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>کلیدها و توکن بازو</h2>
+      <label>توکن ربات بازو (bale_bot_token)</label>
+      <input id="s_bot_token" placeholder="123456:ABCDEF..." />
+      <label>کلید سفیر بله (bale_safir_key)</label>
+      <input id="s_safir_key" placeholder="کلید API سفیر" />
+      <div class="row">
+        <div>
+          <label>روش اطلاع‌رسانی سفارش</label>
+          <select id="s_notify_method">
+            <option value="bale">پیام بله</option>
+            <option value="email">ایمیل</option>
+          </select>
+        </div>
+        <div>
+          <label>مقصد اطلاع‌رسانی (chat_id بله یا ایمیل)</label>
+          <input id="s_notify_target" placeholder="chat_id یا owner@example.com" />
+        </div>
+      </div>
+      <h3>تنظیمات SMTP (فقط اگر روش ایمیل را انتخاب کردید)</h3>
+      <div class="row">
+        <div><label>SMTP Host</label><input id="s_smtp_host" placeholder="smtp.gmail.com" /></div>
+        <div><label>SMTP Port</label><input id="s_smtp_port" placeholder="587" /></div>
+      </div>
+      <div class="row">
+        <div><label>SMTP User</label><input id="s_smtp_user" /></div>
+        <div><label>SMTP Pass</label><input id="s_smtp_pass" type="password" /></div>
+      </div>
+      <label>SMTP From (اختیاری)</label>
+      <input id="s_smtp_from" placeholder="shop@example.com" />
+
+      <h3>ارجاع خودکار به انسان</h3>
+      <div class="row">
+        <div>
+          <label>بعد از چند پیام کاربر، ارجاع بده؟</label>
+          <input id="s_escalation_threshold" type="number" placeholder="10" />
+        </div>
+        <div>
+          <label>کلمات کلیدی ارجاع فوری (با کاما جدا کنید)</label>
+          <input id="s_escalation_keywords" placeholder="اپراتور,پشتیبان,کارشناس" />
+        </div>
+      </div>
+      <label>توضیحات آزاد برای AI (رفتارها/شرایط دیگری که باید ارجاع بدهد)</label>
+      <textarea id="s_escalation_custom" placeholder="مثلاً: اگر کاربر عصبانی بود، اگر درخواست تخفیف بالای ۲۰٪ داد، اگر سوال درباره گارانتی یا مرجوعی بود..."></textarea>
+      <p class="muted">این متن مستقیم به AI داده می‌شود؛ AI خودش بر اساس آن تصمیم می‌گیرد که ارجاع بدهد یا نه
+        (حتی اگر کلمه کلیدی دقیق گفته نشده باشد). در تب «تست چت‌بات» می‌توانید امتحانش کنید.</p>
+
+      <button class="btn" onclick="saveSettings()">ذخیره تنظیمات</button>
+      <button class="btn secondary" onclick="setupWebhook()">تنظیم وبهوک بازو روی این سرور</button>
+      <div id="settingsMsg"></div>
+    </div>
+
+  </section>
+
+  <!-- ===================== تب ۲: محصولات ===================== -->
+  <section class="tab" id="tab-products">
+    <div class="card">
+      <h2>افزودن محصول جدید</h2>
+      <div class="row">
+        <div><label>نام محصول</label><input id="prod_name" /></div>
+        <div><label>کد کوتاه (اختیاری)</label><input id="prod_code" placeholder="خودکار ساخته می‌شود" /></div>
+      </div>
+      <label>توضیحات محصول</label>
+      <textarea id="prod_desc" placeholder="هر چیزی که AI باید برای پاسخ به مشتری بداند..."></textarea>
+      <button class="btn" onclick="createProduct()">ذخیره محصول</button>
+      <div id="productMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>محصولات موجود</h2>
+      <table>
+        <thead><tr><th>نام</th><th>کد</th><th></th></tr></thead>
+        <tbody id="productsTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>🧪 تست چت‌بات (آزمایش آموخته‌های AI)</h2>
+      <p class="muted"><strong>این فقط یک محیط شبیه‌سازی است</strong> — هیچ‌چیز در دیتابیس واقعی
+        ذخیره نمی‌شود، در تب «ارجاع به من» ظاهر نمی‌شود، و اعلانی هم فرستاده نمی‌شود.
+        فقط به شما می‌گوید اگر این یک مشتری واقعی در بله بود، چه اتفاقی می‌افتاد.</p>
+      <label>محصول</label>
+      <select id="testchat_product"></select>
+      <div id="testChatBox" class="chatBox"></div>
+      <div class="chatInputRow">
+        <input id="testChatInput" placeholder="یک سوال مثل یک مشتری واقعی بپرسید..." onkeydown="if(event.key==='Enter') sendTestChat()" />
+        <button class="btn" onclick="sendTestChat()">ارسال</button>
+        <button class="btn secondary" onclick="resetTestChat()">شروع دوباره</button>
+      </div>
+      <div id="testChatMsg"></div>
+    </div>
+  </section>
+
+  <!-- ===================== تب ۳: مخاطبین ===================== -->
+  <section class="tab" id="tab-contacts">
+    <div class="card">
+      <h2>۱) آپلود فایل اکسل مخاطبین</h2>
+      <input id="excelFile" type="file" accept=".xlsx,.xls" />
+      <button class="btn" onclick="uploadExcel()">آپلود و پیش‌نمایش</button>
+      <div id="uploadMsg"></div>
+    </div>
+
+    <div class="card hidden" id="mappingCard">
+      <h2>۲) نگاشت ستون‌ها</h2>
+      <p class="muted" id="totalRowsInfo"></p>
+      <div class="row">
+        <div><label>ستون نام</label><select id="map_name"></select></div>
+        <div><label>ستون شماره تماس</label><select id="map_phone"></select></div>
+        <div><label>ستون کد محصول (اختیاری)</label><select id="map_productCode"><option value="">— هیچ‌کدام —</option></select></div>
+      </div>
+      <label>محصول پیش‌فرض (اگر کد محصول در ستونی نبود)</label>
+      <select id="map_defaultProduct"></select>
+
+      <h3>نمونه داده‌ها</h3>
+      <div style="overflow-x:auto">
+        <table><thead><tr id="sampleHeaderRow"></tr></thead><tbody id="sampleBodyRows"></tbody></table>
+      </div>
+
+      <button class="btn" onclick="confirmImport()">ثبت نهایی مخاطبین</button>
+      <div id="importMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>۳) شروع / ادامه کمپین ارسال</h2>
+      <p class="muted">اگر کمپین به هر دلیلی (قطعی سرور، اینترنت، خرابی API) وسط راه متوقف شد،
+        کافیست دوباره روی همین دکمه بزنید — فقط مخاطبینی که هنوز پیام نگرفته‌اند دوباره فرستاده می‌شوند.</p>
+      
+      <div style="border: 1px solid #ccc; padding: 12px; border-radius: 6px; margin-bottom: 12px;">
+        <h3>تنظیمات کمپین</h3>
+        <label>
+          <input type="radio" name="campaignMode" value="active" checked onchange="toggleCampaignOptions()">
+          گزینه اول (فقط ارسال پیام): یک پیام یکسان به همه‌ی مخاطبین فرستاده می‌شود و هوش مصنوعی به پاسخ‌هایشان جواب نمی‌دهد (پاسخ‌ها فقط ذخیره می‌شوند).
+        </label>
+        <label style="display:block; margin-top:8px;">
+          <input type="radio" name="campaignMode" value="passive" onchange="toggleCampaignOptions()">
+          گزینه دوم (فقط گوش‌به‌زنگ): هیچ پیامی ارسال نمی‌شود. هوش مصنوعی روشن می‌شود و به هر پیام جدیدِ کاربران، بر اساس محصول انتخاب‌شده جواب می‌دهد.
+        </label>
+        <label style="display:block; margin-top:8px;">
+          <input type="radio" name="campaignMode" value="listen_catchup" onchange="toggleCampaignOptions()">
+          گزینه سوم (گوش‌به‌زنگ + پاسخ به پیام‌های بی‌پاسخ): مثل گزینه دوم، و همان لحظه به همه‌ی کسانی که بعد از آخرین پیام ربات چیزی نوشته‌اند و جواب نگرفته‌اند هم نفر به نفر جواب داده می‌شود.
+        </label>
+
+        <div id="activeCampaignOptions" style="margin-top: 12px;">
+          <label>متن پیام اولیه (خالی بگذارید تا از توضیحات محصول استفاده شود)</label>
+          <textarea id="campaignInitialText" rows="3" placeholder="سلام! محصول ما..."></textarea>
+          
+          <label>لینک عکس (اختیاری)</label>
+          <input id="campaignInitialPhoto" placeholder="https://example.com/image.jpg" />
+        </div>
+      </div>
+
+      <label>محصول</label>
+      <select id="campaign_product" onchange="loadCampaignReport()"></select>
+      <div id="campaignStatusLine" class="muted" style="margin-top:6px"></div>
+      <button class="btn" id="campaignSendBtn" onclick="startCampaign()">شروع / ادامه ارسال کمپین</button>
+      <button class="btn secondary" onclick="loadCampaignReport()">به‌روزرسانی گزارش</button>
+      <a id="campaignCsvLink" class="btn secondary hidden" style="display:inline-block;text-decoration:none;text-align:center" href="#">دانلود CSV</a>
+      <button class="btn secondary" onclick="runDiagnostics()">عیب‌یابی پاسخ‌گویی</button>
+      <button class="btn secondary" onclick="resetEscalations()">رفع ارجاع همه‌ی گفتگوها و پاسخ به بی‌پاسخ‌ها</button>
+      <div id="campaignMsg"></div>
+      <pre id="diagBox" class="muted" style="white-space:pre-wrap; margin-top:10px; direction:rtl"></pre>
+      <div id="campaignCounts" class="muted" style="margin-top:10px"></div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>نام</th><th>شماره</th><th>وضعیت</th><th>زمان ارسال</th><th>خطا</th></tr></thead>
+          <tbody id="campaignTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== تب ۴: مکالمات و سفارش‌ها ===================== -->
+  <section class="tab" id="tab-conversations">
+    <div class="card">
+      <h2>مکالمات فعال</h2>
+      <button class="btn secondary small" onclick="loadConversations()">تازه‌سازی</button>
+      <table>
+        <thead><tr><th>مخاطب</th><th>آخرین پیام</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+        <tbody id="conversationsTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>سفارش‌های تکمیل‌شده</h2>
+      <button class="btn secondary small" onclick="loadOrders()">تازه‌سازی</button>
+      <table>
+        <thead><tr><th>مشتری</th><th>شماره</th><th>محصول</th><th>تاریخ</th></tr></thead>
+        <tbody id="ordersTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== تب ۵: ارجاع به انسان ===================== -->
+  <section class="tab" id="tab-handoff">
+    <div class="card">
+      <h2>مکالماتی که منتظر پاسخ شما هستند</h2>
+      <p class="muted">وقتی کاربر کلمه‌ای مثل «اپراتور» بگوید، یا تعداد پیام‌هایش زیاد شود،
+        یا AI کلاً در دسترس نباشد، مکالمه اینجا می‌افتد و AI دیگر خودکار جواب نمی‌دهد.</p>
+      <button class="btn secondary small" onclick="loadEscalated()">تازه‌سازی لیست</button>
+      <div id="escalatedList" style="margin-top:14px"></div>
+    </div>
+
+    <div class="card hidden" id="handoffChatCard">
+      <h2 id="handoffChatTitle">مکالمه</h2>
+      <p class="muted" id="handoffChatReason"></p>
+      <div id="handoffChatBox" class="chatBox"></div>
+      <div class="chatInputRow">
+        <input id="handoffReplyInput" placeholder="پاسخ خودتان را بنویسید..." onkeydown="if(event.key==='Enter') sendHandoffReply()" />
+        <button class="btn" onclick="sendHandoffReply()">ارسال</button>
+        <button class="btn secondary" onclick="resolveHandoff()">پایان ارجاع (برگرداندن به AI)</button>
+      </div>
+      <div id="handoffMsg"></div>
+    </div>
+  </section>
+
+</main>
+
+  <!-- ===================== مدال مشاهده چت ===================== -->
+  <div id="chatViewerModal" class="overlay hidden">
+    <div class="modal">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 id="chatViewerTitle">تاریخچه مکالمه</h2>
+        <button class="btn secondary small" onclick="closeChatViewer()">بستن</button>
+      </div>
+      <div id="chatViewerBox" class="chatBox" style="max-height: 400px; overflow-y: auto;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ---------- احراز هویت پنل ----------
+let adminToken = localStorage.getItem('adminToken') || '';
+
+function showLoginScreen() {
+  document.getElementById('loginOverlay').classList.remove('hidden');
+  document.getElementById('appRoot').classList.add('hidden');
+}
+function hideLoginScreen() {
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.getElementById('appRoot').classList.remove('hidden');
+}
+function saveToken() {
+  const val = document.getElementById('loginTokenInput').value.trim();
+  if (!val) return;
+  adminToken = val;
+  localStorage.setItem('adminToken', val);
+  hideLoginScreen();
+  initApp();
+}
+function logout() {
+  localStorage.removeItem('adminToken');
+  adminToken = '';
+  showLoginScreen();
+}
+
+// ---------- ابزار عمومی ----------
+async function api(path, options) {
+  const opts = options || {};
+  opts.headers = Object.assign({}, opts.headers, adminToken ? { 'x-admin-token': adminToken } : {});
+  const res = await fetch(path, opts);
+  if (res.status === 401) {
+    showLoginScreen();
+    throw new Error('نشست منقضی شده یا توکن اشتباه است. دوباره وارد شوید.');
+  }
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* ممکنه بدنه‌ای نداشته باشه */ }
+  if (!res.ok) throw new Error((data && data.error) || `خطای HTTP ${res.status}`);
+  return data;
+}
+function showMsg(elId, text, ok) {
+  const el = document.getElementById(elId);
+  el.innerHTML = `<div class="msg ${ok ? 'ok' : 'err'}">${text}</div>`;
+}
+
+// ---------- تب‌ها ----------
+document.querySelectorAll('.tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ---------- سلامت سرور ----------
+async function checkHealth() {
+  try {
+    await api('/health');
+    document.getElementById('healthStatus').textContent = '✅ متصل به سرور';
+  } catch (e) {
+    document.getElementById('healthStatus').textContent = '❌ سرور در دسترس نیست';
+  }
+}
+
+// ---------- تب ۱: ارائه‌دهندگان AI ----------
+async function loadProviders() {
+  const { providers } = await api('/admin/ai-providers');
+  const body = document.getElementById('providersTableBody');
+  body.innerHTML = providers.map((p) => `
+    <tr>
+      <td>${p.name}</td>
+      <td>${p.providerType}</td>
+      <td>${p.model}</td>
+      <td>${p.priority}</td>
+      <td>${p.isActive ? '✅ فعال' : '⛔ غیرفعال'}</td>
+      <td><button class="btn danger small" onclick="deleteProvider('${p.id}')">حذف</button></td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" class="muted">هنوز ارائه‌دهنده‌ای ثبت نشده.</td></tr>';
+}
+async function createProvider() {
+  try {
+    await api('/admin/ai-providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('p_name').value,
+        providerType: document.getElementById('p_type').value,
+        model: document.getElementById('p_model').value,
+        priority: Number(document.getElementById('p_priority').value) || 100,
+        baseUrl: document.getElementById('p_baseUrl').value || null,
+        apiKey: document.getElementById('p_apiKey').value,
+      }),
+    });
+    showMsg('providerMsg', 'ارائه‌دهنده با موفقیت اضافه شد.', true);
+    loadProviders();
+  } catch (e) { showMsg('providerMsg', e.message, false); }
+}
+async function deleteProvider(id) {
+  if (!confirm('حذف شود؟')) return;
+  await api('/admin/ai-providers/' + id, { method: 'DELETE' });
+  loadProviders();
+}
+
+// ---------- تب ۱: تنظیمات کلی ----------
+async function saveSettings() {
+  try {
+    await api('/admin/bale/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bale_bot_token: document.getElementById('s_bot_token').value,
+        bale_safir_key: document.getElementById('s_safir_key').value,
+        admin_notify_method: document.getElementById('s_notify_method').value,
+        admin_notify_target: document.getElementById('s_notify_target').value,
+        smtp_host: document.getElementById('s_smtp_host').value,
+        smtp_port: document.getElementById('s_smtp_port').value,
+        smtp_user: document.getElementById('s_smtp_user').value,
+        smtp_pass: document.getElementById('s_smtp_pass').value,
+        smtp_from: document.getElementById('s_smtp_from').value,
+        escalation_message_threshold: document.getElementById('s_escalation_threshold').value,
+        escalation_keywords: document.getElementById('s_escalation_keywords').value,
+        escalation_custom_instructions: document.getElementById('s_escalation_custom').value,
+      }),
+    });
+    showMsg('settingsMsg', 'تنظیمات ذخیره شد.', true);
+  } catch (e) { showMsg('settingsMsg', e.message, false); }
+}
+async function setupWebhook() {
+  try {
+    const res = await api('/admin/bale/setup-webhook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    showMsg('settingsMsg', 'وبهوک تنظیم شد: ' + res.webhookUrl, true);
+  } catch (e) { showMsg('settingsMsg', e.message, false); }
+}
+
+// ---------- تب ۲: محصولات ----------
+async function loadProducts() {
+  const { products } = await api('/admin/products');
+  document.getElementById('productsTableBody').innerHTML = products.map((p) => `
+    <tr><td>${p.name}</td><td>${p.shortCode}</td>
+    <td><button class="btn danger small" onclick="deleteProduct('${p.id}')">حذف</button></td></tr>
+  `).join('') || '<tr><td colspan="3" class="muted">هنوز محصولی ثبت نشده.</td></tr>';
+
+  const opts = products.map((p) => `<option value="${p.id}">${p.name} (${p.shortCode})</option>`).join('');
+  document.getElementById('map_defaultProduct').innerHTML = '<option value="">— بدون محصول پیش‌فرض —</option>' + opts;
+  document.getElementById('campaign_product').innerHTML = opts || '<option value="">هیچ محصولی ثبت نشده</option>';
+  document.getElementById('testchat_product').innerHTML = opts || '<option value="">هیچ محصولی ثبت نشده</option>';
+  return products;
+}
+async function createProduct() {
+  try {
+    await api('/admin/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('prod_name').value,
+        shortCode: document.getElementById('prod_code').value || undefined,
+        descriptionText: document.getElementById('prod_desc').value,
+      }),
+    });
+    showMsg('productMsg', 'محصول ذخیره شد.', true);
+    document.getElementById('prod_name').value = '';
+    document.getElementById('prod_code').value = '';
+    document.getElementById('prod_desc').value = '';
+    loadProducts();
+  } catch (e) { showMsg('productMsg', e.message, false); }
+}
+async function deleteProduct(id) {
+  if (!confirm('حذف شود؟')) return;
+  await api('/admin/products/' + id, { method: 'DELETE' });
+  loadProducts();
+}
+
+// ---------- تب ۳: مخاطبین / اکسل ----------
+let lastUploadToken = null;
+async function uploadExcel() {
+  const fileInput = document.getElementById('excelFile');
+  if (!fileInput.files[0]) { showMsg('uploadMsg', 'یک فایل انتخاب کنید.', false); return; }
+  const form = new FormData();
+  form.append('file', fileInput.files[0]);
+  try {
+    const res = await api('/admin/contacts/upload', { method: 'POST', body: form });
+    lastUploadToken = res.uploadToken;
+    document.getElementById('totalRowsInfo').textContent = `${res.totalDataRows} ردیف داده شناسایی شد.`;
+
+    const colOptions = res.columns.map((c, i) => `<option value="${i}">${c || '(ستون ' + (i+1) + ')'}</option>`).join('');
+    document.getElementById('map_name').innerHTML = colOptions;
+    document.getElementById('map_phone').innerHTML = colOptions;
+    document.getElementById('map_productCode').innerHTML = '<option value="">— هیچ‌کدام —</option>' + colOptions;
+
+    document.getElementById('sampleHeaderRow').innerHTML = res.columns.map((c) => `<th>${c}</th>`).join('');
+    document.getElementById('sampleBodyRows').innerHTML = res.sampleRows.map((row) =>
+      '<tr>' + row.map((cell) => `<td>${cell}</td>`).join('') + '</tr>'
+    ).join('');
+
+    document.getElementById('mappingCard').classList.remove('hidden');
+    showMsg('uploadMsg', 'فایل خوانده شد. ستون‌ها را نگاشت کنید.', true);
+  } catch (e) { showMsg('uploadMsg', e.message, false); }
+}
+async function confirmImport() {
+  if (!lastUploadToken) return;
+  try {
+    const res = await api('/admin/contacts/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uploadToken: lastUploadToken,
+        defaultProductId: document.getElementById('map_defaultProduct').value || undefined,
+        mapping: {
+          nameColumnIndex: Number(document.getElementById('map_name').value),
+          phoneColumnIndex: Number(document.getElementById('map_phone').value),
+          productCodeColumnIndex: document.getElementById('map_productCode').value
+            ? Number(document.getElementById('map_productCode').value) : undefined,
+        },
+      }),
+    });
+    showMsg('importMsg', `${res.insertedCount} مخاطب ثبت شد. ${res.skippedCount} ردیف رد شد.`, true);
+    document.getElementById('mappingCard').classList.add('hidden');
+  } catch (e) { showMsg('importMsg', e.message, false); }
+}
+
+// ---------- تب ۳: کمپین ----------
+function toggleCampaignOptions() {
+  const mode = document.querySelector('input[name="campaignMode"]:checked').value;
+  const optsDiv = document.getElementById('activeCampaignOptions');
+  if (mode === 'active') {
+    optsDiv.style.display = 'block';
+  } else {
+    optsDiv.style.display = 'none';
+  }
+}
+
+async function startCampaign() {
+  const productId = document.getElementById('campaign_product').value;
+  if (!productId) { showMsg('campaignMsg', 'یک محصول انتخاب کنید.', false); return; }
+  
+  const mode = document.querySelector('input[name="campaignMode"]:checked').value;
+  const apiMode = mode === 'active' ? 'send' : mode === 'passive' ? 'listen' : 'listen_catchup';
+  const initialMessageText = document.getElementById('campaignInitialText').value;
+  const initialMessagePhoto = document.getElementById('campaignInitialPhoto').value;
+
+  try {
+    const res = await api(`/admin/campaigns/${productId}/send`, { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: apiMode, initialMessageText, initialMessagePhoto })
+    });
+    showMsg('campaignMsg', res.message, true);
+    setTimeout(loadCampaignReport, 2000);
+  } catch (e) {
+    showMsg('campaignMsg', e.message, false);
+  }
+}
+
+async function viewChat(conversationId) {
+  try {
+    const { conversation } = await api(`/admin/conversations/${conversationId}/messages`);
+    document.getElementById('chatViewerModal').classList.remove('hidden');
+    document.getElementById('chatViewerTitle').textContent = `تاریخچه مکالمه با ${conversation.contact.name} (${conversation.contact.phone})`;
+    document.getElementById('chatViewerBox').innerHTML = conversation.messages.map((m) => {
+      const cls = m.sender === 'user' ? 'user' : 'assistant';
+      const prefix = m.sender === 'human' ? '👤 شما: ' : m.sender === 'ai' ? '🤖 ' : '';
+      return `<div class="chatMsg ${cls}">${prefix}${String(m.text).replace(/</g,'&lt;')}</div>`;
+    }).join('');
+    document.getElementById('chatViewerBox').scrollTop = 999999;
+  } catch(e) {
+    alert("خطا در بارگذاری مکالمه: " + e.message);
+  }
+}
+
+function closeChatViewer() {
+  document.getElementById('chatViewerModal').classList.add('hidden');
+}
+async function runDiagnostics() {
+  const box = document.getElementById('diagBox');
+  box.textContent = 'در حال بررسی...';
+  try {
+    const d = await api('/admin/campaigns/diagnostics');
+    const st = d.stats || {};
+    box.textContent = d.hints.join('\n') +
+      `\n\n— آمار از روشن شدن سرور: درخواست‌های بله: ${st.webhookReceived} | ذخیره‌شده: ${st.messagesSaved} | پاسخ ارسال‌شده: ${st.repliesSent}` +
+      (d.bot ? `\n— ربات: @${d.bot.username || d.bot.id}` : '');
+  } catch (e) { box.textContent = 'خطا: ' + e.message; }
+}
+
+async function resetEscalations() {
+  if (!confirm('همه‌ی گفتگوهایی که به انسان ارجاع شده‌اند دوباره به هوش مصنوعی برگردانده شوند و به پیام‌های بی‌پاسخ جواب داده شود؟')) return;
+  try {
+    const r = await api('/admin/campaigns/reset-escalations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sweep: true })
+    });
+    showMsg('campaignMsg', `${r.cleared} گفتگو به AI برگردانده شد.` + (r.sweepStarted ? ' پاسخ به پیام‌های بی‌پاسخ شروع شد.' : ''), true);
+    setTimeout(loadCampaignReport, 3000);
+  } catch (e) { showMsg('campaignMsg', e.message, false); }
+}
+
+async function loadCampaignReport() {
+  const productId = document.getElementById('campaign_product').value;
+  if (!productId) return;
+  try {
+    const status = await api(`/admin/campaigns/${productId}/status`);
+    const btn = document.getElementById('campaignSendBtn');
+    const statusLine = document.getElementById('campaignStatusLine');
+    if (status.running) {
+      btn.disabled = true;
+      btn.textContent = 'در حال ارسال...';
+      statusLine.textContent = '⏳ کمپین همین الان در حال ارسال است — صفحه را چند ثانیه دیگر رفرش کنید.';
+    } else {
+      btn.disabled = false;
+      btn.textContent = status.counts.pending > 0 ? 'ادامه ارسال کمپین' : 'شروع ارسال کمپین';
+      statusLine.textContent = status.counts.pending > 0
+        ? `⏸ ${status.counts.pending} مخاطب هنوز ارسال نشده (احتمالاً قبلاً متوقف شده).`
+        : '';
+    }
+    const modeText = status.autoReplyMode === 'off' ? 'پاسخ خودکار AI: خاموش (گزینه ۱)' : 'پاسخ خودکار AI: روشن';
+    const sweepText = status.sweeping
+      ? ' | ⏳ در حال پاسخ به پیام‌های بی‌پاسخ...'
+      : (status.lastSweep ? ` | آخرین بررسی پیام‌های بی‌پاسخ: ${status.lastSweep.replied} از ${status.lastSweep.total} پاسخ داده شد` : '');
+    const escText = status.escalated > 0 ? ` | ⚠️ ${status.escalated} گفتگو به انسان ارجاع شده (AI در آن‌ها جواب نمی‌دهد)` : '';
+    const st = status.stats || {};
+    const lastMsgText = st.lastWebhookAt
+      ? ` | آخرین درخواست از بله: ${new Date(st.lastWebhookAt).toLocaleTimeString('fa-IR')}`
+      : ' | از زمان روشن شدن سرور هنوز هیچ پیامی از بله نرسیده';
+    const replyText = st.lastReplyAt ? ` | آخرین پاسخ ارسالی: ${new Date(st.lastReplyAt).toLocaleTimeString('fa-IR')}` : '';
+    const sweepDetail = status.lastSweep && status.lastSweep.escalated > 0 ? ` (${status.lastSweep.escalated} ارجاع‌شده نادیده گرفته شد)` : '';
+    statusLine.textContent = (statusLine.textContent ? statusLine.textContent + ' — ' : '') + modeText + sweepText + sweepDetail + escText + lastMsgText + replyText;
+
+    const res = await api(`/admin/campaigns/${productId}/report`);
+    const c = res.counts;
+    document.getElementById('campaignCounts').textContent =
+      `در انتظار: ${c.pending} | ارسال‌شده: ${c.sent} | بدون بله: ${c.no_bale} | ناموفق: ${c.failed} | گوش‌به‌زنگ: ${c.passive ?? 0}`;
+    if (res.truncated) {
+      document.getElementById('campaignCounts').textContent += ` — (فقط ${res.contacts.length} ردیف اول از ${res.total} نمایش داده می‌شود؛ برای همه، CSV بگیرید)`;
+    }
+    document.getElementById('campaignTableBody').innerHTML = res.contacts.map((ct) => `
+      <tr>
+        <td>${ct.name}</td><td>${ct.phone}</td>
+        <td><span class="badge ${ct.status}">${ct.status}</span></td>
+        <td>${ct.sentAt ? new Date(ct.sentAt).toLocaleString('fa-IR') : '-'}</td>
+        <td class="muted">${ct.errorMessage || ''}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" class="muted">مخاطبی برای این محصول نیست.</td></tr>';
+
+    const csvLink = document.getElementById('campaignCsvLink');
+    csvLink.href = `/admin/campaigns/${productId}/report?format=csv`;
+    csvLink.classList.remove('hidden');
+  } catch (e) { showMsg('campaignMsg', e.message, false); }
+}
+
+// ---------- تب ۲: تست چت‌بات ----------
+let testChatHistory = [];
+let testChatEscalated = false;
+function renderTestChat() {
+  const box = document.getElementById('testChatBox');
+  box.innerHTML = testChatHistory.map((m) =>
+    `<div class="chatMsg ${m.role}">${m.content.replace(/</g,'&lt;')}</div>`
+  ).join('') || '<div class="muted">هنوز پیامی نیست. یک سوال بپرسید.</div>';
+  box.scrollTop = box.scrollHeight;
+  document.getElementById('testChatInput').disabled = testChatEscalated;
+}
+function resetTestChat() {
+  testChatHistory = [];
+  testChatEscalated = false;
+  renderTestChat();
+  document.getElementById('testChatMsg').innerHTML = '';
+}
+async function sendTestChat() {
+  if (testChatEscalated) return; // در حالت واقعی هم بعد از ارجاع، AI دیگر پیام بعدی را پردازش نمی‌کند
+  const productId = document.getElementById('testchat_product').value;
+  const input = document.getElementById('testChatInput');
+  const text = input.value.trim();
+  if (!productId) { showMsg('testChatMsg', 'اول یک محصول انتخاب کنید.', false); return; }
+  if (!text) return;
+
+  testChatHistory.push({ role: 'user', content: text });
+  renderTestChat();
+  input.value = '';
+
+  try {
+    const res = await api(`/admin/products/${productId}/test-chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: testChatHistory }),
+    });
+    testChatHistory.push({ role: 'assistant', content: res.reply });
+    renderTestChat();
+    if (res.needsHuman) {
+      testChatEscalated = true;
+      renderTestChat();
+      const reasonLabel = res.escalationReason === 'keyword' ? 'کلمه کلیدی'
+        : res.escalationReason === 'message_limit' ? 'سقف تعداد پیام'
+        : 'تشخیص خودِ AI (جواب را نمی‌دانست یا طبق توضیحات شما)';
+      showMsg('testChatMsg', `🔔 [فقط شبیه‌سازی] اگر این یک مکالمه‌ی واقعی در بله بود، همین الان ارجاع می‌شد (دلیل: ${reasonLabel}) و AI دیگر خودکار پاسخ نمی‌داد — برای همین اینجا هم چت قفل شد. برای شروع دوباره دکمه‌ی «شروع دوباره» را بزنید.`, true);
+    } else if (res.orderConfirmed) {
+      showMsg('testChatMsg', '✅ [فقط شبیه‌سازی] AI در این پاسخ تگ سفارش قطعی را فعال کرد؛ در حالت واقعی همین‌جا سفارش ثبت و به شما اطلاع داده می‌شد.', true);
+    } else {
+      document.getElementById('testChatMsg').innerHTML = '';
+    }
+  } catch (e) { showMsg('testChatMsg', e.message, false); }
+}
+
+// ---------- تب ۴: ارجاع به انسان ----------
+let currentHandoffConversationId = null;
+async function loadEscalated() {
+  const { conversations } = await api('/admin/conversations/escalated');
+  const badge = document.getElementById('handoffBadge');
+  badge.textContent = conversations.length ? conversations.length : '';
+
+  document.getElementById('escalatedList').innerHTML = conversations.map((c) => `
+    <div class="card" style="cursor:pointer" onclick="openHandoffChat('${c.id}')">
+      <strong>${c.contact.name}</strong> <span class="muted">(${c.contact.phone})</span>
+      <div class="muted" style="margin-top:4px">
+        دلیل: ${c.escalationReason === 'keyword' ? 'درخواست صحبت با اپراتور' : c.escalationReason === 'ai_failure' ? 'خرابی موقت AI' : c.escalationReason === 'ai_requested' ? 'خودِ AI تشخیص داد (جواب را نمی‌دانست)' : 'تعداد پیام زیاد شد'}
+        ${c.product ? ' | محصول: ' + c.product.name : ''}
+      </div>
+    </div>
+  `).join('') || '<p class="muted">فعلاً هیچ مکالمه‌ای منتظر شما نیست 🎉</p>';
+}
+async function openHandoffChat(conversationId) {
+  currentHandoffConversationId = conversationId;
+  const { conversation } = await api(`/admin/conversations/${conversationId}/messages`);
+  document.getElementById('handoffChatCard').classList.remove('hidden');
+  document.getElementById('handoffChatTitle').textContent = `مکالمه با ${conversation.contact.name} (${conversation.contact.phone})`;
+  document.getElementById('handoffChatReason').textContent = conversation.product ? 'محصول: ' + conversation.product.name : '';
+  document.getElementById('handoffChatBox').innerHTML = conversation.messages.map((m) => {
+    const cls = m.sender === 'user' ? 'user' : 'assistant';
+    const prefix = m.sender === 'human' ? '👤 شما: ' : m.sender === 'ai' ? '🤖 ' : '';
+    return `<div class="chatMsg ${cls}">${prefix}${String(m.text).replace(/</g,'&lt;')}</div>`;
+  }).join('');
+  document.getElementById('handoffChatBox').scrollTop = 999999;
+  document.getElementById('handoffMsg').innerHTML = '';
+}
+async function sendHandoffReply() {
+  if (!currentHandoffConversationId) return;
+  const input = document.getElementById('handoffReplyInput');
+  const text = input.value.trim();
+  if (!text) return;
+  try {
+    await api(`/admin/conversations/${currentHandoffConversationId}/reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    input.value = '';
+    openHandoffChat(currentHandoffConversationId);
+  } catch (e) { showMsg('handoffMsg', e.message, false); }
+}
+async function resolveHandoff() {
+  if (!currentHandoffConversationId) return;
+  if (!confirm('این مکالمه به AI برگردد و دوباره خودکار پاسخ بدهد؟')) return;
+  await api(`/admin/conversations/${currentHandoffConversationId}/resolve`, { method: 'POST' });
+  document.getElementById('handoffChatCard').classList.add('hidden');
+  currentHandoffConversationId = null;
+  loadEscalated();
+}
+
+// ---------- تب ۴: مکالمات و سفارش‌ها ----------
+async function loadConversations() {
+  const { conversations } = await api('/admin/orders/conversations/active');
+  document.getElementById('conversationsTableBody').innerHTML = conversations.map((c) => `
+    <tr>
+      <td>${c.contact.name} (${c.contact.phone})</td>
+      <td>${(c.messages[0] && c.messages[0].text) || '-'}</td>
+      <td><span class="badge active">${c.state}</span></td>
+      <td><button class="btn secondary small" onclick="viewChat('${c.id}')">مشاهده چت</button></td>
+    </tr>
+  `).join('') || '<tr><td colspan="4" class="muted">مکالمه فعالی نیست.</td></tr>';
+}
+async function loadOrders() {
+  const { orders } = await api('/admin/orders');
+  document.getElementById('ordersTableBody').innerHTML = orders.map((o) => `
+    <tr>
+      <td>${o.conversation.contact.name}</td>
+      <td>${o.conversation.contact.phone}</td>
+      <td>${(o.conversation.product && o.conversation.product.name) || '-'}</td>
+      <td>${new Date(o.createdAt).toLocaleString('fa-IR')}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="4" class="muted">هنوز سفارشی ثبت نشده.</td></tr>';
+}
+
+// ---------- شروع اولیه ----------
+function initApp() {
+  checkHealth();
+  loadProviders().catch(() => {});
+  loadProducts().catch(() => {});
+  loadConversations().catch(() => {});
+  loadOrders().catch(() => {});
+  loadEscalated().catch(() => {});
+  setInterval(() => { loadEscalated().catch(() => {}); }, 30000);
+}
+
+if (adminToken) {
+  hideLoginScreen();
+  initApp();
+} else {
+  showLoginScreen();
+}
+</script>
+
+</body>
+</html>

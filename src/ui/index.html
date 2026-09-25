@@ -156,6 +156,7 @@
   <button class="tab-btn" data-tab="contacts">مخاطبین</button>
   <button class="tab-btn" data-tab="conversations">مکالمات و سفارش‌ها</button>
   <button class="tab-btn" data-tab="handoff">ارجاع به من <span id="handoffBadge"></span></button>
+  <button class="tab-btn" data-tab="insights">تحلیل و بهبود</button>
 </nav>
 
 <main>
@@ -268,6 +269,8 @@
       </div>
       <label>توضیحات محصول</label>
       <textarea id="prod_desc" placeholder="هر چیزی که AI باید برای پاسخ به مشتری بداند..."></textarea>
+      <label>آدرس عکس محصول (اختیاری — در اولین پاسخ AI برای مشتری فرستاده می‌شود)</label>
+      <input id="prod_photo" placeholder="https://.../photo.jpg" />
       <button class="btn" onclick="createProduct()">ذخیره محصول</button>
       <div id="productMsg"></div>
     </div>
@@ -277,6 +280,35 @@
       <table>
         <thead><tr><th>نام</th><th>کد</th><th></th></tr></thead>
         <tbody id="productsTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>🧬 نسخه‌های A/B پرامپت/پرسونا</h2>
+      <p class="muted">برای یک محصول چند نسخه‌ی مختلف از پرامپت/پرسونا بساز؛ به‌صورت تصادفیِ وزن‌دار بین مکالمات تازه تقسیم می‌شوند و می‌توانی نرخ تبدیل هرکدام را مقایسه کنی.</p>
+      <label>محصول</label>
+      <select id="ab_product" onchange="loadProductVariants()"></select>
+
+      <h3>افزودن نسخه‌ی جدید</h3>
+      <div class="row">
+        <div><label>نام نسخه</label><input id="ab_name" placeholder="مثلاً «لحن رسمی»" /></div>
+        <div><label>وزن (نسبت انتخاب)</label><input id="ab_weight" type="number" value="1" /></div>
+      </div>
+      <label>کل متن پرامپت این نسخه (جایگزین کامل توضیحات محصول برای مکالماتی که این نسخه را می‌گیرند)</label>
+      <textarea id="ab_desc" placeholder="پرسونا، لحن، قوانین و مشخصات محصول..."></textarea>
+      <button class="btn" onclick="createVariant()">افزودن نسخه</button>
+      <div id="abMsg"></div>
+
+      <h3>نسخه‌های این محصول</h3>
+      <table>
+        <thead><tr><th>نام</th><th>وزن</th><th>وضعیت</th><th></th></tr></thead>
+        <tbody id="variantsTableBody"></tbody>
+      </table>
+
+      <button class="btn secondary" onclick="loadVariantReport()">گزارش نرخ تبدیل هر نسخه</button>
+      <table>
+        <thead><tr><th>نسخه</th><th>مکالمات</th><th>سفارش</th><th>نرخ تبدیل</th></tr></thead>
+        <tbody id="variantReportBody"></tbody>
       </table>
     </div>
 
@@ -361,7 +393,10 @@
       <button class="btn" id="campaignSendBtn" onclick="startCampaign()">شروع / ادامه ارسال کمپین</button>
       <button class="btn secondary" onclick="loadCampaignReport()">به‌روزرسانی گزارش</button>
       <a id="campaignCsvLink" class="btn secondary hidden" style="display:inline-block;text-decoration:none;text-align:center" href="#">دانلود CSV</a>
+      <button class="btn secondary" onclick="runDiagnostics()">عیب‌یابی پاسخ‌گویی</button>
+      <button class="btn secondary" onclick="resetEscalations()">رفع ارجاع همه‌ی گفتگوها و پاسخ به بی‌پاسخ‌ها</button>
       <div id="campaignMsg"></div>
+      <pre id="diagBox" class="muted" style="white-space:pre-wrap; margin-top:10px; direction:rtl"></pre>
       <div id="campaignCounts" class="muted" style="margin-top:10px"></div>
       <div style="overflow-x:auto">
         <table>
@@ -414,6 +449,35 @@
       </div>
       <div id="handoffMsg"></div>
     </div>
+  </section>
+
+  <!-- ===================== تب ۶: تحلیل و بهبود ===================== -->
+  <section class="tab" id="tab-insights">
+
+    <div class="card">
+      <h2>📊 دلایل ارجاع به انسان + سوالاتی که AI جوابشان را نمی‌دانست</h2>
+      <p class="muted">این‌ها گنجینه‌ی بهبود توضیحات محصول‌اند: هرچه بیشتر تکرار شوند، بیشتر باید در «توضیحات محصول» اضافه شوند.</p>
+      <button class="btn secondary small" onclick="loadInsights()">بارگذاری / تازه‌سازی</button>
+      <div id="insightsBox" style="margin-top:14px"></div>
+    </div>
+
+    <div class="card">
+      <h2>🕵️ گزارش «چرا مشتری نخرید»</h2>
+      <p class="muted">خلاصه‌ای که با کمک AI از مکالمات رهاشده (بدون سفارش) ساخته می‌شود. چون هزینه‌ی یک فراخوانی AI دارد، درخواستی است.</p>
+      <div class="row">
+        <div><label>مکالمات رهاشده‌ی چند ساعت اخیر بررسی شود؟</label><input id="churn_hours" type="number" value="2" /></div>
+      </div>
+      <button class="btn" onclick="generateChurnReport()">ساخت گزارش</button>
+      <div id="churnBox" style="margin-top:14px; white-space:pre-wrap"></div>
+    </div>
+
+    <div class="card">
+      <h2>⏰ پیگیری خودکار مشتریان مردد</h2>
+      <p class="muted">هر ۳۰ دقیقه خودش اجرا می‌شود (بعد از ۲۴ ساعت بی‌پاسخی مشتری). اینجا می‌توانید بدون منتظر ماندن، همین الان یک دور اجرا کنید.</p>
+      <button class="btn" onclick="runFollowUpNow()">اجرای دستی الان</button>
+      <div id="followUpBox" style="margin-top:14px"></div>
+    </div>
+
   </section>
 
 </main>
@@ -578,6 +642,11 @@ async function loadProducts() {
   document.getElementById('map_defaultProduct').innerHTML = '<option value="">— بدون محصول پیش‌فرض —</option>' + opts;
   document.getElementById('campaign_product').innerHTML = opts || '<option value="">هیچ محصولی ثبت نشده</option>';
   document.getElementById('testchat_product').innerHTML = opts || '<option value="">هیچ محصولی ثبت نشده</option>';
+  const abSelect = document.getElementById('ab_product');
+  const prevAbValue = abSelect.value;
+  abSelect.innerHTML = opts || '<option value="">هیچ محصولی ثبت نشده</option>';
+  if (prevAbValue && products.some((p) => p.id === prevAbValue)) abSelect.value = prevAbValue;
+  else if (products.length) loadProductVariants();
   return products;
 }
 async function createProduct() {
@@ -589,12 +658,14 @@ async function createProduct() {
         name: document.getElementById('prod_name').value,
         shortCode: document.getElementById('prod_code').value || undefined,
         descriptionText: document.getElementById('prod_desc').value,
+        photoUrl: document.getElementById('prod_photo').value || undefined,
       }),
     });
     showMsg('productMsg', 'محصول ذخیره شد.', true);
     document.getElementById('prod_name').value = '';
     document.getElementById('prod_code').value = '';
     document.getElementById('prod_desc').value = '';
+    document.getElementById('prod_photo').value = '';
     loadProducts();
   } catch (e) { showMsg('productMsg', e.message, false); }
 }
@@ -602,6 +673,109 @@ async function deleteProduct(id) {
   if (!confirm('حذف شود؟')) return;
   await api('/admin/products/' + id, { method: 'DELETE' });
   loadProducts();
+}
+
+// ---------- تب ۲: نسخه‌های A/B پرامپت ----------
+async function loadProductVariants() {
+  const productId = document.getElementById('ab_product').value;
+  document.getElementById('variantReportBody').innerHTML = '';
+  if (!productId) { document.getElementById('variantsTableBody').innerHTML = ''; return; }
+  try {
+    const { variants } = await api(`/admin/products/${productId}/prompt-variants`);
+    document.getElementById('variantsTableBody').innerHTML = variants.map((v) => `
+      <tr>
+        <td>${v.name}</td>
+        <td>${v.weight}</td>
+        <td>${v.isActive ? '✅ فعال' : '⛔ غیرفعال'}</td>
+        <td>
+          <button class="btn secondary small" onclick="toggleVariant('${v.id}', ${!v.isActive})">${v.isActive ? 'غیرفعال کن' : 'فعال کن'}</button>
+          <button class="btn danger small" onclick="deleteVariant('${v.id}')">حذف</button>
+        </td>
+      </tr>
+    `).join('') || '<tr><td colspan="4" class="muted">هنوز نسخه‌ای برای این محصول ساخته نشده (پرامپت پیش‌فرض محصول استفاده می‌شود).</td></tr>';
+  } catch (e) { showMsg('abMsg', e.message, false); }
+}
+async function createVariant() {
+  const productId = document.getElementById('ab_product').value;
+  if (!productId) { showMsg('abMsg', 'اول یک محصول انتخاب کنید.', false); return; }
+  try {
+    await api(`/admin/products/${productId}/prompt-variants`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('ab_name').value,
+        descriptionText: document.getElementById('ab_desc').value,
+        weight: Number(document.getElementById('ab_weight').value) || 1,
+      }),
+    });
+    showMsg('abMsg', 'نسخه ذخیره شد.', true);
+    document.getElementById('ab_name').value = '';
+    document.getElementById('ab_desc').value = '';
+    document.getElementById('ab_weight').value = '1';
+    loadProductVariants();
+  } catch (e) { showMsg('abMsg', e.message, false); }
+}
+async function toggleVariant(id, isActive) {
+  await api('/admin/products/prompt-variants/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ isActive }),
+  });
+  loadProductVariants();
+}
+async function deleteVariant(id) {
+  if (!confirm('این نسخه حذف شود؟')) return;
+  await api('/admin/products/prompt-variants/' + id, { method: 'DELETE' });
+  loadProductVariants();
+}
+async function loadVariantReport() {
+  const productId = document.getElementById('ab_product').value;
+  if (!productId) { showMsg('abMsg', 'اول یک محصول انتخاب کنید.', false); return; }
+  try {
+    const { variants } = await api(`/admin/analytics/products/${productId}/ab-test`);
+    document.getElementById('variantReportBody').innerHTML = variants.map((v) => `
+      <tr>
+        <td>${v.name}</td><td>${v.conversations}</td><td>${v.orders}</td><td>${v.conversionRate}%</td>
+      </tr>
+    `).join('') || '<tr><td colspan="4" class="muted">داده‌ای موجود نیست.</td></tr>';
+  } catch (e) { showMsg('abMsg', e.message, false); }
+}
+
+// ---------- تب ۶: تحلیل و بهبود ----------
+async function loadInsights() {
+  const box = document.getElementById('insightsBox');
+  box.textContent = 'در حال بارگذاری...';
+  try {
+    const r = await api('/admin/analytics/insights');
+    const esc = r.escalation || {};
+    const byReason = Object.entries(esc.byReason || {}).map(([reason, count]) =>
+      `<li>${reason}: ${count}</li>`
+    ).join('') || '<li class="muted">هنوز ارجاعی ثبت نشده.</li>';
+    const topics = (r.unansweredTopics && r.unansweredTopics.top || []).map((t) =>
+      `<li>«${t.topic}» — ${t.count} بار</li>`
+    ).join('') || '<li class="muted">هنوز سوال بی‌جوابی ثبت نشده.</li>';
+    box.innerHTML = `
+      <h3>دلایل ارجاع (${esc.total || 0} مورد)</h3><ul>${byReason}</ul>
+      <h3>پرتکرارترین سوالات بی‌جواب (${r.unansweredTopics ? r.unansweredTopics.total : 0} مورد)</h3><ul>${topics}</ul>
+    `;
+  } catch (e) { box.innerHTML = `<div class="msg err">${e.message}</div>`; }
+}
+async function generateChurnReport() {
+  const box = document.getElementById('churnBox');
+  const hours = document.getElementById('churn_hours').value || 2;
+  box.textContent = 'در حال تحلیل با AI... (ممکن است چند ثانیه طول بکشد)';
+  try {
+    const r = await api(`/admin/analytics/churn?hours=${hours}`);
+    box.textContent = `${r.conversationsAnalyzed} مکالمه بررسی شد.\n\n${r.summary}`;
+  } catch (e) { box.innerHTML = `<div class="msg err">${e.message}</div>`; }
+}
+async function runFollowUpNow() {
+  const box = document.getElementById('followUpBox');
+  box.textContent = 'در حال اجرا...';
+  try {
+    const r = await api('/admin/analytics/follow-up/run-now', { method: 'POST' });
+    box.innerHTML = `<div class="msg ok">${r.scanned} مشتری مردد بررسی شد؛ ${r.sent} پیام پیگیری ارسال شد.</div>`;
+  } catch (e) { box.innerHTML = `<div class="msg err">${e.message}</div>`; }
 }
 
 // ---------- تب ۳: مخاطبین / اکسل ----------
@@ -704,6 +878,31 @@ async function viewChat(conversationId) {
 function closeChatViewer() {
   document.getElementById('chatViewerModal').classList.add('hidden');
 }
+async function runDiagnostics() {
+  const box = document.getElementById('diagBox');
+  box.textContent = 'در حال بررسی...';
+  try {
+    const d = await api('/admin/campaigns/diagnostics');
+    const st = d.stats || {};
+    box.textContent = d.hints.join('\n') +
+      `\n\n— آمار از روشن شدن سرور: درخواست‌های بله: ${st.webhookReceived} | ذخیره‌شده: ${st.messagesSaved} | پاسخ ارسال‌شده: ${st.repliesSent}` +
+      (d.bot ? `\n— ربات: @${d.bot.username || d.bot.id}` : '');
+  } catch (e) { box.textContent = 'خطا: ' + e.message; }
+}
+
+async function resetEscalations() {
+  if (!confirm('همه‌ی گفتگوهایی که به انسان ارجاع شده‌اند دوباره به هوش مصنوعی برگردانده شوند و به پیام‌های بی‌پاسخ جواب داده شود؟')) return;
+  try {
+    const r = await api('/admin/campaigns/reset-escalations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sweep: true })
+    });
+    showMsg('campaignMsg', `${r.cleared} گفتگو به AI برگردانده شد.` + (r.sweepStarted ? ' پاسخ به پیام‌های بی‌پاسخ شروع شد.' : ''), true);
+    setTimeout(loadCampaignReport, 3000);
+  } catch (e) { showMsg('campaignMsg', e.message, false); }
+}
+
 async function loadCampaignReport() {
   const productId = document.getElementById('campaign_product').value;
   if (!productId) return;
@@ -726,7 +925,14 @@ async function loadCampaignReport() {
     const sweepText = status.sweeping
       ? ' | ⏳ در حال پاسخ به پیام‌های بی‌پاسخ...'
       : (status.lastSweep ? ` | آخرین بررسی پیام‌های بی‌پاسخ: ${status.lastSweep.replied} از ${status.lastSweep.total} پاسخ داده شد` : '');
-    statusLine.textContent = (statusLine.textContent ? statusLine.textContent + ' — ' : '') + modeText + sweepText;
+    const escText = status.escalated > 0 ? ` | ⚠️ ${status.escalated} گفتگو به انسان ارجاع شده (AI در آن‌ها جواب نمی‌دهد)` : '';
+    const st = status.stats || {};
+    const lastMsgText = st.lastWebhookAt
+      ? ` | آخرین درخواست از بله: ${new Date(st.lastWebhookAt).toLocaleTimeString('fa-IR')}`
+      : ' | از زمان روشن شدن سرور هنوز هیچ پیامی از بله نرسیده';
+    const replyText = st.lastReplyAt ? ` | آخرین پاسخ ارسالی: ${new Date(st.lastReplyAt).toLocaleTimeString('fa-IR')}` : '';
+    const sweepDetail = status.lastSweep && status.lastSweep.escalated > 0 ? ` (${status.lastSweep.escalated} ارجاع‌شده نادیده گرفته شد)` : '';
+    statusLine.textContent = (statusLine.textContent ? statusLine.textContent + ' — ' : '') + modeText + sweepText + sweepDetail + escText + lastMsgText + replyText;
 
     const res = await api(`/admin/campaigns/${productId}/report`);
     const c = res.counts;
